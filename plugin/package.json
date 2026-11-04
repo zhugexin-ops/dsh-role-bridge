@@ -1,6 +1,6 @@
 {
   "name": "dsh-role-bridge",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "叫她 — 给正在对话的 AI 装一副外骨骼：她住在文件里，不在会话里。跨会话还是同一个人。",
   "type": "module",
   "main": "./lib/index.js",
@@ -33,12 +33,19 @@
     },
     "client": {
       "platform": "web",
-      "inject": ["@deepseek-ai/dsh-client-ui-slots"]
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
     },
     "permissions": {
       "process:spawn": "调用本机 python 跑 role_core.py（唯一执行方式）",
-      "fs:read": ["~/.dsh/role-bridge.json", "工作区下的 角色/ 与 机制/"],
-      "fs:write": ["~/.dsh/role-bridge.json"],
+      "fs:read": [
+        "~/.dsh/role-bridge.json",
+        "工作区下的 角色/ 与 机制/"
+      ],
+      "fs:write": [
+        "~/.dsh/role-bridge.json"
+      ],
       "net:listen": "仅监听本机回环（webServer 挂的插件路由），不发起外网请求",
       "net:outbound": "无（引擎自己怎么联网不在此插件声明范围内）"
     },
@@ -50,7 +57,13 @@
       "doctorTimeoutMs": "自检超时（毫秒，默认 180000）"
     }
   },
-  "keywords": ["dsh", "plugin", "character", "agent", "role-play"],
+  "keywords": [
+    "dsh",
+    "plugin",
+    "character",
+    "agent",
+    "role-play"
+  ],
   "license": "MIT",
   "engines": {
     "node": ">=18"

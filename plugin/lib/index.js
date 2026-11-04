@@ -7,6 +7,10 @@
 //
 // 边界（交接单）：不重写引擎逻辑、不拼提示词、不碰 角色\ 与 机制\ 下的文件。
 
+import { appendFileSync } from 'node:fs';
+import path from 'node:path';
+import { homedir } from 'node:os';
+
 import {
   createRuntime,
   createRuntimeAsync,
@@ -20,9 +24,12 @@ import {
   stamp,
 } from './engine.js';
 import { attachExoskeleton, exoStatus, exoToggle, exoStream, shouldTakeOver, detectTrigger } from './exo.js';
+import { ensureDaemon, stopDaemon, daemonHealth } from './daemon.js';
+import { memorySection, recordTurn, injectMemory, memoryStatus, MEMORY_SECTION } from './memory.js';
+import { checkLedger } from './guard.js';
 
 export const name = 'role-bridge';
-export const inject = ['webServer', 'llm'];
+export const inject = ['webServer', 'llm', 'systemPrompt', 'tools'];
 
 const API_PREFIX = '/role-bridge/api';
 const GUARD_HEADER = 'x-role-bridge';
@@ -170,6 +177,143 @@ export function apply(ctx, config = {}) {
       return rt.cfg;
     });
 
+  // 「打开就运行」：配置一解析完就把常驻拉起来（已经在跑就复用），
+  // 之后所有回话都走这一个进程——一把锁、同一本账。
+  rt.ready
+    .then(async () => {
+      const st = await ensureDaemon(rt.cfg);
+      rt.daemon = st;
+      if (st.ok && st.url) {
+        rt.cfg.daemonUrl = st.url;
+        ctx?.logger?.info?.(`[role-bridge] 常驻已就绪 ${st.url}（${st.reason}）`);
+      } else {
+        ctx?.logger?.warn?.('[role-bridge] 常驻没起来：' + (st.reason || '未知原因') + '（回话会退回每次单起）');
+      }
+      return st;
+    })
+    .catch((e) => {
+      ctx?.logger?.warn?.('[role-bridge] 拉起常驻失败：' + (e && e.message));
+      return null;
+    });
+
+  ctx.effect(() => () => stopDaemon(rt.daemon), 'dsh-role-bridge: daemon');
+
+  // ===== 账本护栏：只追加这件事要能成立，就得有一条物理的线 =====
+  //
+  // 她/它的账（`角色\<名>\memory.sqlite` 与同目录 .tsv）只由引擎写。
+  // 会话里的 AI 调工具时只要指向这些文件，就在这里被拦下来。
+  // 不拦别的文件——那是拿笼子关人。
+  ctx.effect(
+    () =>
+      ctx.tools.guard((exec) => {
+        try {
+          const cfg = rt.cfg;
+          if (!cfg) return undefined;
+          const reason = checkLedger(exec, cfg);
+          if (reason) {
+            ctx?.logger?.warn?.(`[role-bridge] ${reason}`);
+            return reason;
+          }
+          return undefined;
+        } catch {
+          return undefined;
+        }
+      }),
+    'dsh-role-bridge: ledger-guard'
+  );
+
+
+  // ===== 外骨骼模式：给「这个会话的 AI」装一本外部的账 =====
+  //
+  // 开口前把「它记得什么」塞进系统提示；说完把这一轮记进账。
+  // 两个钩子都只降级、不阻断：拼提示失败就当没记忆，记账失败就算了。
+  // 默认关着（cfg.exo.name 为空），开了才动手。
+
+  ctx.effect(
+    () =>
+      ctx.on('system-prompt/assemble', async (assembly, _context, next) => {
+        const settled = await next();
+        try {
+          await rt.ready;
+          const text = await memorySection(rt.cfg);
+          if (!text) return settled;
+          return injectMemory(settled, text);
+        } catch (e) {
+          ctx?.logger?.warn?.('[role-bridge] 记忆注入失败（按没有记忆继续）：' + (e && e.message));
+          return settled;
+        }
+      }),
+    'dsh-role-bridge: memory-inject'
+  );
+
+  const answers = new Map(); // agentId -> 这一轮助手说出来的一整段
+
+  // 调试用：事件形状不确定，先记账再谈提取（只写本地文件，不打扰对话）
+  const dbg = (ev, extra) => {
+    if (!memoryStatus(rt.cfg).enabled) return;
+    try {
+      const line = JSON.stringify({ t: stamp(), ev, ...extra }) + '\n';
+      appendFileSync(path.join(homedir(), '.dsh', 'plugins', 'role-bridge', 'memory-debug.log'), line);
+    } catch {
+      /* 调试失败不影响任何事 */
+    }
+  };
+
+  /** 从各种可能的形状里挖出一段话（挖不到给空串） */
+  const anyText = (obj, depth = 0) => {
+    if (obj == null || depth > 3) return '';
+    if (typeof obj === 'string') return obj;
+    if (Array.isArray(obj)) {
+      return obj.map((x) => anyText(x, depth + 1)).filter(Boolean).join('\n');
+    }
+    if (typeof obj !== 'object') return '';
+    for (const key of ['text', 'content', 'body', 'message', 'value', 'delta', 'output']) {
+      const got = anyText(obj[key], depth + 1);
+      if (got) return got;
+    }
+    return '';
+  };
+
+  ctx.on('agent/assistant-stream', (payload) => {
+    try {
+      const agent = payload && payload.agent;
+      if (!agent || !agent.id) return;
+      const frame = payload.frame || {};
+      const type = String(frame.type || '');
+      const piece = anyText(frame);
+      dbg('stream', { type, chars: piece.length, keys: Object.keys(frame).slice(0, 6) });
+      if (!piece) return;
+      if (type === 'start') {
+        answers.set(agent.id, piece);
+      } else {
+        answers.set(agent.id, (answers.get(agent.id) || '') + piece);
+      }
+      if (answers.size > 200) {
+        const first = answers.keys().next().value;
+        answers.delete(first);
+      }
+    } catch {
+      /* 观察失败不影响对话 */
+    }
+  });
+
+  ctx.on('agent/inbox/inserted', (payload) => {
+    try {
+      const agent = payload && payload.agent;
+      if (!agent || !agent.id) return;
+      const said = answers.get(agent.id);
+      if (said) {
+        answers.delete(agent.id);
+        recordTurn(rt.cfg, '助手', said).catch(() => {});
+      }
+      const text = anyText(payload.message) || messageText(payload.message);
+      dbg('inbox', { chars: text.length, head: text.slice(0, 30) });
+      if (text) recordTurn(rt.cfg, '用户', text).catch(() => {});
+    } catch {
+      /* 同上 */
+    }
+  });
+
 
   const handler = async (req, res) => {
     try {
@@ -197,6 +341,10 @@ export function apply(ctx, config = {}) {
             roles: await readRoles(rt.cfg),
             bindings: await readBindings(rt.cfg),
             shadow: rt.shadow.slice(-200),
+            daemon: {
+              ...(rt.daemon || { ok: false, reason: '还没起来' }),
+              health: await daemonHealth(rt.cfg.daemonUrl),
+            },
           });
           return;
         }
