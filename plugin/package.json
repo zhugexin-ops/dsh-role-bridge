@@ -1,7 +1,7 @@
 {
   "name": "dsh-role-bridge",
   "version": "0.2.2",
-  "description": "叫她 — 给正在对话的 AI 装一副外骨骼：她住在文件里，不在会话里。跨会话还是同一个人。",
+  "description": "给你的 AI 装一副外骨骼：一本跨会话的账，一条能按问题挑回来的记忆，一段可核查的往事。装上它，你的 AI 不再属于某一个对话。",
   "type": "module",
   "main": "./lib/index.js",
   "exports": {
@@ -62,7 +62,9 @@
     "plugin",
     "character",
     "agent",
-    "role-play"
+    "memory",
+    "exoskeleton",
+    "ledger"
   ],
   "license": "MIT",
   "engines": {
@@ -71,8 +73,8 @@
   "icon": "./icon.svg",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zhugexin-ops/-README.git",
+    "url": "git+https://github.com/zhugexin-ops/dsh-role-bridge.git",
     "directory": "plugin"
   },
-  "homepage": "https://github.com/zhugexin-ops/-README#readme"
+  "homepage": "https://github.com/zhugexin-ops/dsh-role-bridge#readme"
 }

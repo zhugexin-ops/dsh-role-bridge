@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Talk to Her",
-    "description": "Open a panel and talk to a character: calls role_core.py locally. Shell only — does not change the engine or the characters."
+    "title": "Exoskeleton",
+    "description": "Give your chat AI an exoskeleton: one ledger across sessions, question-aware recall, an auditable past. Install it and your AI stops belonging to a single conversation."
   }
 }
