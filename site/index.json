@@ -18,8 +18,7 @@
           "source": {
             "type": "git",
             "url": "https://github.com/zhugexin-ops/dsh-role-bridge.git",
-            "commit": "bab1bbe721530f350bcaaf560fa0027f00e5ea67",
-            "path": "plugin"
+            "commit": "bab1bbe721530f350bcaaf560fa0027f00e5ea67"
           },
           "engines": {
             "dsh": ">=0.1.0"
