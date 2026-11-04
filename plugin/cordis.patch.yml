@@ -1,0 +1,5 @@
+# dsh-role-bridge —— 「叫她」外壳插件
+# 只做外壳：调用 role_core.py 的 --reply / --doctor，不改引擎、不改角色文件、不拼提示词。
+- insert:
+    - id: role-bridge
+      name: 'dsh-role-bridge'

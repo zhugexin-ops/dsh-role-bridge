@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Talk to Her",
+    "description": "Open a panel and talk to a character: calls role_core.py locally. Shell only — does not change the engine or the characters."
+  }
+}

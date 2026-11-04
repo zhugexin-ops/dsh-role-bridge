@@ -1,0 +1,7 @@
+{
+    "enabled":  true,
+    "speaker":  "X",
+    "trigger":  "@",
+    "maxMs":  90000,
+    "debug":  false
+}

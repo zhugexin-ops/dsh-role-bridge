@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "叫她",
+    "description": "点开就能跟角色说话：本地调用 role_core.py，只做外壳，不改引擎和角色。"
+  }
+}

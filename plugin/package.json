@@ -1,0 +1,59 @@
+{
+  "name": "dsh-role-bridge",
+  "version": "0.2.0",
+  "description": "叫她 — 给正在对话的 AI 装一副外骨骼：她住在文件里，不在会话里。跨会话还是同一个人。",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "role-bridge-setup": "./lib/setup.mjs"
+  },
+  "files": [
+    "lib",
+    "locale",
+    "test",
+    "!test/**/*.log",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "setup": "node lib/setup.mjs",
+    "selftest": "node test/selftest.mjs"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": ["@deepseek-ai/dsh-client-ui-slots"]
+    },
+    "permissions": {
+      "process:spawn": "调用本机 python 跑 role_core.py（唯一执行方式）",
+      "fs:read": ["~/.dsh/role-bridge.json", "工作区下的 角色/ 与 机制/"],
+      "fs:write": ["~/.dsh/role-bridge.json"],
+      "net:listen": "仅监听本机回环（webServer 挂的插件路由），不发起外网请求",
+      "net:outbound": "无（引擎自己怎么联网不在此插件声明范围内）"
+    },
+    "config": {
+      "workspace": "角色目录所在的工作区（等价于 ROLE_WS）",
+      "python": "python 可执行文件路径；不填则自动探测 DSH 运行时",
+      "engine": "role_core.py 的路径；不填则在 workspace / ~/.dsh 下探测",
+      "timeoutMs": "单次回话超时（毫秒，默认 120000）",
+      "doctorTimeoutMs": "自检超时（毫秒，默认 180000）"
+    }
+  },
+  "keywords": ["dsh", "plugin", "character", "agent", "role-play"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "icon": "./icon.svg"
+}
