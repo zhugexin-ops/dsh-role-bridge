@@ -1,6 +1,6 @@
 {
   "name": "dsh-role-bridge",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "叫她 — 给正在对话的 AI 装一副外骨骼：她住在文件里，不在会话里。跨会话还是同一个人。",
   "type": "module",
   "main": "./lib/index.js",

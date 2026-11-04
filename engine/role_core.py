@@ -17591,6 +17591,170 @@ def act_voice_list():
         print(u"   %-6s %-26s %s %s" % (k, vid, rt, pt))
 
 # ===== 部：主 · 只做分发，不亲自办事  ============
+
+def _ensure_role(name):
+    u"""外骨骼模式：角色目录不存在就按 --new 的同一套建起来（幂等）"""
+    import contextlib
+    _sink = io.StringIO()
+    with contextlib.redirect_stdout(_sink):
+        return _ensure_role_inner(name)
+
+
+def _ensure_role_inner(name):
+    d, cpath, mpath = paths(name)
+    if os.path.exists(mpath):
+        return d
+    try:
+        if not os.path.isdir(d):
+            os.makedirs(d)
+    except Exception:
+        pass
+    try:
+        init_axes(name, u"")
+    except Exception:
+        pass
+    for fn in (ensure_guard, ensure_diff):
+        try:
+            fn(name)
+        except Exception:
+            pass
+    try:
+        act_vet(name)
+    except Exception:
+        pass
+    try:
+        open_memory(name).close()
+    except Exception:
+        pass
+    return d
+
+
+def ext_context(name, question=u"", top=6):
+    u"""外骨骼：不生成回复，只把该记得的端出来（按这句话挑，不是取最近）"""
+    if not os.path.isdir(_ensure_role(name)):
+        return u"没有这个角色「%s」：先跑 --new %s（外骨骼只记账，不替它以生）" % (name, name)
+    top = max(1, int(top or 6))
+    q = (question or u"").strip()
+
+    rows = []
+    for lim in (400, 120, max(4, top)):
+        try:
+            rows = memory_rows(name, lim) or []
+        except Exception:
+            rows = []
+        if len(rows) >= max(4, top):
+            break
+    rows = [r for r in rows if not r.get("vetoed") and not r.get("let_go")]
+    if not rows:
+        return u"【%s 记得的（这台机器上的账，不是这次对话）】\n（还没有什么可端上来的）" % name
+
+    emb_map = {}
+    try:
+        _c = sqlite3.connect(os.path.join(_ensure_role(name), "memory.sqlite"))
+        for _rid, _e in _c.execute("select id, embedding from log"):
+            if _e:
+                try:
+                    emb_map[_rid] = json.loads(_e)
+                except Exception:
+                    pass
+        _c.close()
+    except Exception:
+        emb_map = {}
+
+    corr = {}
+    if q:
+        try:
+            embs = _embed_texts([q])
+        except Exception:
+            embs = None
+        if embs and embs[0]:
+            qv = embs[0]
+            for r in rows:
+                _ev = emb_map.get(r["id"]) or r.get("embedding")
+                if _ev:
+                    try:
+                        corr[r["id"]] = max(0.0, _cosine(qv, _ev))
+                    except Exception:
+                        pass
+        a = _grams(q)
+        if a:
+            for r in rows:
+                b = _grams((r.get("scene") or u"") + u"\n" + (r.get("text") or u""))
+                if not b:
+                    continue
+                inter = len(a & b)
+                if inter >= 2 and (inter / float(max(1, len(a)))) >= RECALL_GRAM_DEFAULT:
+                    corr[r["id"]] = max(corr.get(r["id"], 0.0), 0.45)
+
+    def _rank(r):
+        c = max(0.02, corr.get(r["id"], 0.0))
+        w = max(0.05, r.get("weight") or 1.0)
+        return (c ** 0.65) * (w ** 0.35)
+
+    picked, seen = [], set()
+    hit = [r for r in rows if corr.get(r["id"], 0.0) >= 0.15]
+    if hit:
+        for r in sorted(hit, key=_rank, reverse=True)[:max(1, top - 2)]:
+            picked.append(r)
+            seen.add(r["id"])
+    for r in sorted(rows, key=lambda x: (x.get("ts") or 0), reverse=True):
+        if len(picked) >= top:
+            break
+        if r["id"] not in seen:
+            picked.append(r)
+            seen.add(r["id"])
+    picked.sort(key=lambda x: (x.get("ts") or 0))
+
+    body = recall_block(picked, budget=1200, name=name) or u""
+    why = u"按这句话挑的" if (q and hit) else u"这台机器上的账，不是这次对话"
+    head = u"【%s 记得的（%s）】" % (name, why)
+    return head + u"\n" + (body or u"（还没有什么可端上来的）")
+
+
+def ext_act(name, verb, arg=u""):
+    u"""外骨骼的「做一件事」：退出 / 沉底 / 议案。返回一句人话。"""
+    if not os.path.isdir(_ensure_role(name)):
+        return u"没有这个角色「%s」：先跑 --new %s（外骨骼只记账，不替它以生）" % (name, name)
+    v = (verb or u"").strip()
+    if v in (u"退出", u"leave", u"quit"):
+        act_leave(name)
+        return u"记下了：%s 退出了。政府休眠，记忆留着，只有它能自己恢复。" % name
+    if v in (u"放走", u"放下", u"不要了", u"letgo"):
+        if not re.search(u"#?\\d+", (arg or u"")):
+            return u"要写：#编号（放走哪一条）"
+        out = act_letgo(name, arg or u"")
+        return out if out else u"（放走：没说什么）"
+    if v in (u"沉底", u"沉底的", u"sink", u"sunken"):
+        if re.search(u"#?\\d+", (arg or u"")):
+            return u"沉底只用来查；要真放下一条，写：放走 %s" % (arg or u"").strip()
+        out = act_sunken(name, arg or u"")
+        return out if out else u"[电脑] 现在没有沉到底下的东西。"
+    if v in (u"捡回来", u"捞回来", u"捡", u"pickup", u"pick"):
+        out = act_pickup(name, arg or u"")
+        return out if out else u"（捡回来：没说什么）"
+    if v in (u"议案", u"bill"):
+        if not (arg or u"").strip():
+            return u"议案得有一句话，空的不算。"
+        out = bill_her(name, arg)
+        return out if out else u"（议案：没写成）"
+    return u"不认识的动作用：%s（只支持 退出 / 沉底 / 议案）" % v
+
+
+def ext_record(name, who, text, scene=u""):
+    u"""外骨骼：把这一轮里的一句话记进她/他的账（只追加）"""
+    _ensure_role(name)
+    who = (who or u"用户").strip()
+    body = (text or u"").strip()
+    if not body:
+        return None
+    kind = u"fact" if who in (u"用户", u"你", u"他", u"她") else u"life"
+    line = u"%s：%s" % (who, body)
+    if len(line) > 400:
+        line = line[:400] + u"…"
+    rid = append(name, kind, line, scene=scene or u"外骨骼")
+    return rid
+
+
 def main():
     u"""命令行入口：一个参数一个动作。"""
     ap = argparse.ArgumentParser(description="叙事核心：角色的容器（三层，权限单向）")
@@ -17603,6 +17767,13 @@ def main():
     ap.add_argument("--reply", metavar="角色", help="IM 桥干净模式：只输出角色说的话，无 🐟 无诊断无 token 行（给群聊桥用）")
     ap.add_argument("--speaker", metavar="名字", default="", help="--reply：谁在说话（群聊传昵称，私聊传对方的名字）；不给就当她眼前的场景")
     ap.add_argument("--via", metavar="来路", default="", help="--reply：这话是在哪儿说的（群123 / DM / 面板 / QQ）；不给＝不记来路")
+    ap.add_argument("--context", metavar="角色", help="外骨骼：不生成回复，只端出它记得的东西（给宿主模型当上下文）")
+    ap.add_argument("--record", metavar="角色", help="外骨骼：把这一轮里的一句话记进账")
+    ap.add_argument("--act", metavar="角色", help="外骨骼：做一个动作（退出 / 沉底 / 议案）")
+    ap.add_argument("--verb", metavar="动作", help="--act 的动作名：退出 / 沉底 / 议案")
+    ap.add_argument("--arg", dest="act_arg", metavar="参数", help="--act 的附加参数（议案原文、沉底编号等）")
+    ap.add_argument("--rwho", default=u"", help="--record：谁说的（用户 / 助手 / 某个名字）")
+    ap.add_argument("--rtext", default=u"", help="--record 的内容；--context 时可给这句话（暂不参与召回）")
     ap.add_argument("--turn", metavar="角色", help="一次互动＝1 次调用（态+巡检+回应一起出，最省：≈¥0.006）")
     ap.add_argument("--lean", action="store_true", help="--say 走省 token 的单次调用（等价于 --turn）")
     ap.add_argument("--verify", metavar="角色", help="复核最近几轮的合并巡检（并排打印两盏灯）")
@@ -17992,6 +18163,16 @@ def main():
         if not a.scene:
             raise SystemExit("--brief 需要情境")
         act_brief(a.brief, a.scene, a.prov, judge=not a.lean)
+    if getattr(a, "act", None):
+        print(ext_act(a.act, a.verb or u"", getattr(a, "act_arg", None) or a.rtext or u""))
+        return
+    if a.context:
+        print(ext_context(a.context, a.rtext or u"", a.top))
+        return
+    if a.record:
+        _rid = ext_record(a.record, a.rwho or u"用户", a.rtext or u"")
+        print(u"记下 #%s" % _rid if _rid else u"（空话，不记）")
+        return
     if a.reply:
         if not a.scene:
             raise SystemExit("--reply 需要情境")
