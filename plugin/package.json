@@ -68,5 +68,11 @@
   "engines": {
     "node": ">=18"
   },
-  "icon": "./icon.svg"
+  "icon": "./icon.svg",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhugexin-ops/-README.git",
+    "directory": "plugin"
+  },
+  "homepage": "https://github.com/zhugexin-ops/-README#readme"
 }
