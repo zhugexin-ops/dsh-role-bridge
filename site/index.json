@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "plugins": [
+    {
+      "id": "dsh-role-bridge",
+      "name": "叫她 · dsh-role-bridge",
+      "description": "给会话 AI 装一副外骨骼：跨会话的记忆、账本与制度。装了它，你的 AI 就不再属于某一个对话，而是属于你。",
+      "homepage": "https://github.com/zhugexin-ops/-README",
+      "tags": [
+        "memory",
+        "agent",
+        "roleplay"
+      ],
+      "versions": [
+        {
+          "version": "0.2.2",
+          "source": {
+            "type": "git",
+            "url": "https://github.com/zhugexin-ops/-README.git",
+            "commit": "826eb11685ec35aa23888054a27a9c1148fea675",
+            "path": "plugin"
+          },
+          "engines": {
+            "dsh": ">=0.1.0"
+          }
+        }
+      ]
+    }
+  ]
+}
