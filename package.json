@@ -1,6 +1,6 @@
 {
   "name": "dsh-role-bridge",
-  "version": "0.2.5",
+  "version": "0.2.7",
   "description": "给你的 AI 装一副外骨骼：一本跨会话的账，一条能按问题挑回来的记忆，一段可核查的往事。装上它，你的 AI 不再属于某一个对话。",
   "type": "module",
   "main": "./lib/index.js",
