@@ -11,14 +11,14 @@
       },
       "versions": [
         {
-          "version": "0.2.7",
+          "version": "0.2.8",
           "engines": {
             "dsh": ">=0.1.0"
           },
           "source": {
             "type": "git",
             "url": "https://github.com/zhugexin-ops/dsh-role-bridge.git",
-            "commit": "2fa497bea30b054a59c93522f69cc9eede32e4be",
+            "commit": "a8fb9e814731a4e5f91f89a44aa86fbed1ba6bfd",
             "path": "."
           }
         }
